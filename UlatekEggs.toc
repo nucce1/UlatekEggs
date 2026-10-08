@@ -2,7 +2,7 @@
 ## Title: UlatekEggs |cffffd100For Science|r
 ## Notes: Karta över vilket ägg du tar i fas 2 på Ula'tek (Mythic). Av Tjocksmock, For Science. /ute
 ## Author: Tjocksmock (For Science)
-## Version: 2.2.3
+## Version: 2.2.4
 ## Category: Combat
 ## IconTexture: Interface\AddOns\UlatekEggs\Media\icon
 ## SavedVariables: UlatekEggsDB

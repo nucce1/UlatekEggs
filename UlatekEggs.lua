@@ -61,6 +61,7 @@ local DEFAULTS = {
 	duration = 30,         -- fönsterlängd i sekunder
 	sound = false,         -- ljud när kartan dyker upp (opt-in)
 	noteTimes = true,      -- tid-raden i noten går före de lokala tiderna
+	noteChat = false,      -- skriv ditt ägg i chatten när noten kommer (NS skickar om vid ready check/pulltimer, därför av)
 	scale = 1, point = { "CENTER", 0, 150 },
 }
 
@@ -568,12 +569,12 @@ ev:RegisterEvent("ENCOUNTER_END")
 local buildPanel, statusLines -- definieras nedan
 
 -- Northern Sky: när en ny reminder tas emot, berätta direkt vad noten ger dig
-local callbackOwner, lastReminderLine, lastReminderAt = {}, nil, 0
+local callbackOwner, lastReminderLine = {}, nil
 local function onReminderChanged()
-	if not noteBlock() then return end -- bara noter med ulaStart-block
+	if not DB.noteChat or not noteBlock() then return end -- valbart; bara noter med ulaStart-block
 	local line = statusLines()[1]
-	if line == lastReminderLine and GetTime() - lastReminderAt < 5 then return end -- NS fyrar ofta flera gånger
-	lastReminderLine, lastReminderAt = line, GetTime()
+	if line == lastReminderLine then return end -- NS skickar om samma not vid ready check och pulltimer
+	lastReminderLine = line
 	say("ny raidnot – %s", line)
 end
 
@@ -773,6 +774,7 @@ function buildPanel()
 	-- Avancerat
 	header("Avancerat (behövs normalt inte)")
 	checkbox("Använd tiderna i raidnoten (raden 'tid 3:28 3:54') när den finns", "noteTimes")
+	checkbox("Skriv ditt ägg i chatten när en ny not kommer (bara när tilldelningen ändrats)", "noteChat")
 	slider("Visningstid per hörn när noten inte anger någon", "duration", 10, 60, 10, function(v) return ("%d s"):format(v) end)
 	button("Redigera äggens positioner…", 16, y, 200, function() run("edit") end)
 	local resetBtn = button("Återställ inbyggda positioner", 226, y, 200, function() run("reset") end)

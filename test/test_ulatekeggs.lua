@@ -184,7 +184,7 @@ check("hörnknappar", buttons["Vänster övre"] ~= nil and buttons["Höger nedre
 check("Återställ dold utan egen layout", buttons["Återställ inbyggda positioner"].shown, false)
 local boxes = {}
 for _, fr in ipairs(frames) do if fr.kind == "CheckButton" then boxes[#boxes + 1] = fr end end
-check("två kryssrutor", #boxes, 2)
+check("tre kryssrutor", #boxes, 3)
 check("kryssruta speglar DB (ljud av)", boxes[1].checked, false)
 boxes[1].checked = true
 boxes[1].scripts.OnClick(boxes[1])
@@ -273,19 +273,22 @@ nsCallback("NSRT_REMINDER_CHANGED", NS_PERSONAL, NS_SHARED)
 check("not utan block ger ingen chattrad", said("ny raidnot"), false)
 NS_SHARED = "ulaStart Veraiz V1 Nucce H2/H3 ulaEnd"
 clearOutput()
-now = 4000
+check("chattrad vid ny not är av som standard", DB.noteChat, false)
 nsCallback("NSRT_REMINDER_CHANGED", NS_PERSONAL, NS_SHARED)
-check("ny not med block ger Ditt ägg i chatten", said("ny raidnot – |cff80ff80Ditt ägg: höger 2 i övre hörnet, höger 3 i nedre hörnet|r (från Northern Sky-noten)"), true)
+check("avstängt: ingen chattrad trots ny not", said("ny raidnot"), false)
+DB.noteChat = true
+nsCallback("NSRT_REMINDER_CHANGED", NS_PERSONAL, NS_SHARED)
+check("påslaget: ny not med block ger Ditt ägg i chatten", said("ny raidnot – |cff80ff80Ditt ägg: höger 2 i övre hörnet, höger 3 i nedre hörnet|r (från Northern Sky-noten)"), true)
 local n = #output
 nsCallback("NSRT_REMINDER_CHANGED", NS_PERSONAL, NS_SHARED)
-check("samma not strax efter tystas", #output, n)
-now = 4010
+now = now + 600
 nsCallback("NSRT_REMINDER_CHANGED", NS_PERSONAL, NS_SHARED)
-check("samma not efter 10 s får skrivas igen", #output, n + 1)
+check("samma not (ready check/pulltimer) tystas oavsett tid", #output, n)
 NS_SHARED = "ulaStart Veraiz V1 ulaEnd"
 clearOutput()
 nsCallback("NSRT_REMINDER_CHANGED", NS_PERSONAL, NS_SHARED)
 check("ny not där jag saknas säger det", said("ny raidnot – |cffff6060Ditt ägg: inget|r – du står inte i raidnotens ulaStart-block"), true)
+DB.noteChat = false
 NS_SHARED = nil
 NSAPI = nil
 now = 1000
