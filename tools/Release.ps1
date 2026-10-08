@@ -13,6 +13,15 @@ if ($toc -notmatch '## Version: ([\d.]+)') { throw "Hittar ingen version i Ulate
 $version = $Matches[1]
 Write-Host "UlatekEggs v$version" -ForegroundColor Cyan
 
+# 0. Förkontroller, innan något byggs: gh inloggad och versionen inte redan släppt
+$env:Path += ';C:\Program Files\GitHub CLI'
+if (-not $SkipGit) {
+    gh auth status 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "gh är inte inloggad i det här fönstret: kör 'gh auth login --web' och sedan 'gh auth setup-git' en gång, försök igen" }
+    gh release view "v$version" 2>&1 | Out-Null
+    if ($LASTEXITCODE -eq 0) { throw "release v$version finns redan - bumpa versionen i UlatekEggs.toc först" }
+}
+
 # 1. Lint + tester
 $luacheck = "$env:USERPROFILE\tools\luacheck.exe"
 if (Test-Path $luacheck) {
@@ -46,7 +55,6 @@ Write-Host "installerad i AddOns"
 if ($SkipGit) { return }
 
 # 4. Git: commit, tag, push (git använder gh som credential helper: gh auth setup-git)
-$env:Path += ';C:\Program Files\GitHub CLI'
 git add -A
 $pending = git status --porcelain
 if ($pending) {
@@ -59,7 +67,6 @@ git push -q origin HEAD "v$version" # taggen uttryckligen: --follow-tags pushar 
 if ($LASTEXITCODE -ne 0) { throw "git push misslyckades (kör 'gh auth setup-git' om git inte hittar tokenen)" }
 
 # 5. GitHub-release med zip + release.json
-if (gh release view "v$version" 2>$null) { throw "release v$version finns redan - bumpa versionen i UlatekEggs.toc" }
 $notes = if ($Message) { $Message } else { "UlatekEggs v$version" }
 gh release create "v$version" $zip "$dist\release.json" --title "v$version" --notes $notes
 if ($LASTEXITCODE -ne 0) { throw "gh release create misslyckades" }
