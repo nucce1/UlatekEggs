@@ -5,10 +5,10 @@ WoW-addon av **Tjocksmock**, guilden **For Science**. Visar i fas 2 på Ula'tek 
 ## Installera med WowUp
 
 1. Öppna WowUp → **Get Addons** → **Install from URL**.
-2. Klistra in `https://github.com/__GITHUB_USER__/UlatekEggs` och tryck **Import**.
+2. Klistra in `https://github.com/nucce1/UlatekEggs` och tryck **Import**.
 3. WowUp hämtar senaste releasen och uppdaterar automatiskt när en ny kommer.
 
-Manuellt: ladda ner zip-filen från senaste [releasen](https://github.com/__GITHUB_USER__/UlatekEggs/releases/latest) och packa upp i `World of Warcraft\_retail_\Interface\AddOns\`.
+Manuellt: ladda ner zip-filen från senaste [releasen](https://github.com/nucce1/UlatekEggs/releases/latest) och packa upp i `World of Warcraft\_retail_\Interface\AddOns\`.
 
 ## Så fungerar det
 
