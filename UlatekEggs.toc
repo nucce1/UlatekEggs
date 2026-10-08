@@ -1,0 +1,11 @@
+## Interface: 120100, 120105
+## Title: UlatekEggs |cffffd100For Science|r
+## Notes: Karta över vilket ägg du tar i fas 2 på Ula'tek (Mythic). Av Tjocksmock, For Science. /ute
+## Author: Tjocksmock (For Science)
+## Version: 2.2.1
+## Category: Combat
+## IconTexture: Interface\Icons\inv_egg_09
+## SavedVariables: UlatekEggsDB
+## OptionalDeps: NorthernSkyRaidTools, MRT
+
+UlatekEggs.lua

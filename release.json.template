@@ -1,0 +1,12 @@
+{
+  "releases": [
+    {
+      "filename": "UlatekEggs-v__VERSION__.zip",
+      "nolib": false,
+      "metadata": [
+        { "flavor": "mainline", "interface": 120100 },
+        { "flavor": "mainline", "interface": 120105 }
+      ]
+    }
+  ]
+}
