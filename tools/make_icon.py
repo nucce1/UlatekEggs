@@ -1,25 +1,26 @@
-r"""Ritar UlatekEggs-ikonen: Ula'tek (orm) slingrad runt ett grönt ägg.
+r"""Bygger UlatekEggs-ikonen som SVG (Ula'tek slingrad runt ett glödande ägg)
+och renderar den till PNG med Edge headless.
 
-    python tools\make_icon.py
+    python tools/make_icon.py
 
-Skapar docs/logo.png (512x512), docs/social-preview.png (1280x640, laddas upp
-manuellt under GitHub > Settings > Social preview) och Media/icon.png (64x64,
-addonlistans ikon via ## IconTexture).
+Skapar docs/icon.svg, docs/logo.png (512), docs/social-preview.png (1280x640,
+laddas upp manuellt under GitHub > Settings > Social preview) och Media/icon.png
+(64, addonlistans ikon). Ormkroppen beräknas som en avsmalnande polygon längs
+en bezierkedja så att fyllning, gradient och fjällmönster kan läggas på i SVG.
 """
 import math
 import pathlib
+import subprocess
+import tempfile
+import time
 
-from PIL import Image, ImageDraw, ImageFilter, ImageFont
+from PIL import Image
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-S = 4  # supersampling
-
-BG, GOO = (18, 40, 32), (120, 190, 40)
-SNAKE, SNAKE_DARK, SNAKE_BELLY = (108, 64, 165), (40, 20, 65), (160, 120, 210)
-EGG, EGG_DARK, EGG_LIGHT = (76, 220, 76), (20, 60, 20), (170, 250, 170)
+EDGE = r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
 
 
-def bezier(p0, p1, p2, p3, n=300):
+def bezier(p0, p1, p2, p3, n=120):
     pts = []
     for i in range(n + 1):
         t = i / n
@@ -29,98 +30,166 @@ def bezier(p0, p1, p2, p3, n=300):
     return pts
 
 
-def stroke(draw, pts, radii, color):
-    for (x, y), r in zip(pts, radii):
-        draw.ellipse((x - r, y - r, x + r, y + r), fill=color)
+def ribbon(pts, width_at):
+    """Polygon runt en mittlinje: bredd width_at(t) (t 0..1) per punkt."""
+    n = len(pts)
+    left, right = [], []
+    for i, (x, y) in enumerate(pts):
+        x0, y0 = pts[max(i - 1, 0)]
+        x1, y1 = pts[min(i + 1, n - 1)]
+        dx, dy = x1 - x0, y1 - y0
+        length = math.hypot(dx, dy) or 1
+        nx, ny = -dy / length, dx / length
+        w = width_at(i / (n - 1)) / 2
+        left.append((x + nx * w, y + ny * w))
+        right.append((x - nx * w, y - ny * w))
+    poly = left + right[::-1]
+    return "M " + " L ".join(f"{x:.1f},{y:.1f}" for x, y in poly) + " Z"
 
 
-def draw_art(size):
-    """Ikonen i given storlek (kvadrat), ritad i supersampling och nedskalad."""
-    W = size * S
-    im = Image.new("RGBA", (W, W), (0, 0, 0, 0))
-    d = ImageDraw.Draw(im)
-    u = W / 512  # enhet: 512-koordinater
+def centerline(pts):
+    return "M " + " L ".join(f"{x:.1f},{y:.1f}" for x, y in pts)
 
-    # bakgrund: rundad platta med grön goo-glöd
-    d.rounded_rectangle((0, 0, W - 1, W - 1), radius=90 * u, fill=BG)
-    glow = Image.new("RGBA", (W, W), (0, 0, 0, 0))
-    gd = ImageDraw.Draw(glow)
-    gd.ellipse((60 * u, 120 * u, 452 * u, 512 * u), fill=GOO + (150,))
-    glow = glow.filter(ImageFilter.GaussianBlur(70 * u))
-    im.alpha_composite(glow)
-    d = ImageDraw.Draw(im)
 
-    # ormens bana: bakre del (bakom ägget) och främre del (framför)
-    back = bezier((70 * u, 440 * u), (150 * u, 520 * u), (380 * u, 500 * u), (445 * u, 350 * u))
-    front = bezier((445 * u, 350 * u), (470 * u, 250 * u), (110 * u, 290 * u), (150 * u, 190 * u)) + \
-        bezier((150 * u, 190 * u), (175 * u, 120 * u), (260 * u, 90 * u), (330 * u, 118 * u))[1:]
-    n_back, n_front = len(back), len(front)
-    r_back = [(6 + 26 * i / n_back) * u for i in range(n_back)]
-    r_front = [(32 - 4 * i / n_front) * u for i in range(n_front)]
+def build_svg(plate=True):
+    # Kroppen: svans nere till vänster, bakom ägget nedtill, upp på höger sida,
+    # framför ägget snett upp åt vänster, upp till huvudet uppe till höger.
+    back = bezier((54, 430), (120, 540), (420, 530), (462, 330), n=160)
+    front = bezier((462, 330), (480, 220), (90, 300), (132, 190), n=160) + \
+        bezier((132, 190), (160, 110), (250, 70), (318, 96), n=120)[1:]
+    back_poly = ribbon(back, lambda t: 10 + 46 * t)
+    front_poly = ribbon(front, lambda t: 56 - 8 * t)
+    back_belly = centerline([(x + 2, y + 9) for x, y in back[20:]])
+    front_belly = centerline([(x + 2, y + 9) for x, y in front[:-25]])
 
-    def body(pts, radii):
-        stroke(d, pts, [r + 5 * u for r in radii], SNAKE_DARK)
-        stroke(d, pts, radii, SNAKE)
-        # ljusare buk: tunnare linje något förskjuten
-        stroke(d, [(x + 3 * u, y + 6 * u) for x, y in pts], [r * 0.45 for r in radii], SNAKE_BELLY)
-        # fjällmönster: mörka prickar längs ryggen
-        for i in range(0, len(pts), 22):
-            x, y = pts[i]
-            rr = radii[i] * 0.22
-            d.ellipse((x - rr - 8 * u, y - rr - 9 * u, x + rr - 8 * u, y + rr - 9 * u), fill=SNAKE_DARK)
+    return f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+<defs>
+  <radialGradient id="bg" cx="50%" cy="58%" r="70%">
+    <stop offset="0" stop-color="#15362a"/><stop offset="1" stop-color="#050b08"/>
+  </radialGradient>
+  <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+    <stop offset="0" stop-color="#9dff3c" stop-opacity="0.55"/><stop offset="0.6" stop-color="#5ab52a" stop-opacity="0.18"/><stop offset="1" stop-color="#5ab52a" stop-opacity="0"/>
+  </radialGradient>
+  <radialGradient id="egg" cx="38%" cy="28%" r="78%">
+    <stop offset="0" stop-color="#e9ffd6"/><stop offset="0.25" stop-color="#8ef05a"/><stop offset="0.7" stop-color="#3aa83a"/><stop offset="1" stop-color="#145a24"/>
+  </radialGradient>
+  <linearGradient id="skin" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#8f67d8"/><stop offset="0.5" stop-color="#5a3496"/><stop offset="1" stop-color="#2d1650"/>
+  </linearGradient>
+  <linearGradient id="head" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#a07be8"/><stop offset="1" stop-color="#3b1f66"/>
+  </linearGradient>
+  <pattern id="scales" width="22" height="16" patternUnits="userSpaceOnUse" patternTransform="rotate(-25)">
+    <path d="M0,0 Q11,10 22,0 L22,16 Q11,6 0,16 Z" fill="#000" fill-opacity="0.22"/>
+    <path d="M0,0 Q11,10 22,0" fill="none" stroke="#d9c9ff" stroke-opacity="0.35" stroke-width="1.6"/>
+  </pattern>
+  <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+    <feDropShadow dx="0" dy="8" stdDeviation="8" flood-color="#000" flood-opacity="0.6"/>
+  </filter>
+  <filter id="soft" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="12"/></filter>
+  <clipPath id="eggclip"><ellipse cx="256" cy="302" rx="118" ry="150"/></clipPath>
+</defs>
 
-    body(back, r_back)
+{'<rect width="512" height="512" rx="96" fill="url(#bg)"/>' if plate else ''}
+<ellipse cx="256" cy="330" rx="230" ry="200" fill="url(#glow)"/>
 
-    # ägget
-    ex, ey, rx, ry = 256 * u, 300 * u, 112 * u, 142 * u
-    d.ellipse((ex - rx - 7 * u, ey - ry - 7 * u, ex + rx + 7 * u, ey + ry + 7 * u), fill=EGG_DARK)
-    d.ellipse((ex - rx, ey - ry, ex + rx, ey + ry), fill=EGG)
-    d.ellipse((ex - 60 * u, ey - 110 * u, ex - 10 * u, ey - 40 * u), fill=EGG_LIGHT)  # glans
-    for sx, sy, sr in ((-30, 30, 9), (35, -10, 7), (20, 70, 8), (-55, 80, 6), (55, 50, 5)):
-        d.ellipse((ex + sx * u - sr * u, ey + sy * u - sr * u, ex + sx * u + sr * u, ey + sy * u + sr * u), fill=EGG_DARK)
+<!-- bakre kroppen -->
+<g filter="url(#shadow)">
+  <path d="{back_poly}" fill="#1a0b33"/>
+  <path d="{back_poly}" fill="url(#skin)" transform="translate(0,0)" style="paint-order:stroke" stroke="#1a0b33" stroke-width="6"/>
+  <path d="{back_poly}" fill="url(#scales)"/>
+  <path d="{back_belly}" fill="none" stroke="#e2d4ff" stroke-opacity="0.28" stroke-width="12" stroke-linecap="round"/>
+</g>
 
-    body(front, r_front)
+<!-- ägget -->
+<g filter="url(#shadow)">
+  <ellipse cx="256" cy="302" rx="118" ry="150" fill="url(#egg)" stroke="#0b3a16" stroke-width="7"/>
+  <g clip-path="url(#eggclip)" fill="#0f4a1b" fill-opacity="0.55">
+    <ellipse cx="226" cy="330" rx="11" ry="8" transform="rotate(-20 226 330)"/>
+    <ellipse cx="292" cy="290" rx="8" ry="6" transform="rotate(30 292 290)"/>
+    <ellipse cx="275" cy="372" rx="10" ry="7" transform="rotate(10 275 372)"/>
+    <ellipse cx="202" cy="384" rx="7" ry="5"/>
+    <ellipse cx="312" cy="345" rx="6" ry="5"/>
+    <ellipse cx="250" cy="420" rx="9" ry="6" transform="rotate(-15 250 420)"/>
+  </g>
+  <ellipse cx="214" cy="212" rx="34" ry="52" fill="#ffffff" fill-opacity="0.35" transform="rotate(-18 214 212)" filter="url(#soft)"/>
+</g>
 
-    # huvud
-    hx, hy = 330 * u, 118 * u
-    d.ellipse((hx - 58 * u, hy - 44 * u, hx + 58 * u, hy + 40 * u), fill=SNAKE_DARK)
-    d.ellipse((hx - 52 * u, hy - 38 * u, hx + 52 * u, hy + 34 * u), fill=SNAKE)
-    for ox in (-22, 18):  # ögon
-        d.ellipse((hx + ox * u - 14 * u, hy - 22 * u, hx + ox * u + 14 * u, hy + 6 * u), fill=(255, 255, 255))
-        d.ellipse((hx + ox * u - 5 * u, hy - 18 * u, hx + ox * u + 7 * u, hy + 2 * u), fill=(10, 10, 10))
-        d.ellipse((hx + ox * u - 1 * u, hy - 15 * u, hx + ox * u + 4 * u, hy - 10 * u), fill=(255, 255, 255))
-    # kluven tunga
-    tx, ty = hx + 50 * u, hy + 14 * u
-    d.line([(tx, ty), (tx + 40 * u, ty + 8 * u)], fill=(230, 40, 60), width=int(6 * u))
-    d.line([(tx + 40 * u, ty + 8 * u), (tx + 56 * u, ty - 4 * u)], fill=(230, 40, 60), width=int(5 * u))
-    d.line([(tx + 40 * u, ty + 8 * u), (tx + 56 * u, ty + 20 * u)], fill=(230, 40, 60), width=int(5 * u))
+<!-- främre kroppen -->
+<g filter="url(#shadow)">
+  <path d="{front_poly}" fill="url(#skin)" stroke="#1a0b33" stroke-width="6" style="paint-order:stroke"/>
+  <path d="{front_poly}" fill="url(#scales)"/>
+  <path d="{front_belly}" fill="none" stroke="#e2d4ff" stroke-opacity="0.28" stroke-width="12" stroke-linecap="round"/>
+</g>
 
-    return im.resize((size, size), Image.LANCZOS)
+<!-- huvudet: kilformat, vänt åt höger -->
+<g transform="translate(318,96) rotate(12)" filter="url(#shadow)">
+  <path d="M-52,-26 C-20,-50 40,-46 76,-8 C86,2 86,10 76,16 C40,42 -20,44 -52,22 C-64,12 -64,-14 -52,-26 Z" fill="url(#head)" stroke="#1a0b33" stroke-width="6"/>
+  <path d="M-52,-26 C-20,-50 40,-46 76,-8 C86,2 86,10 76,16 C40,42 -20,44 -52,22 C-64,12 -64,-14 -52,-26 Z" fill="url(#scales)" fill-opacity="0.7"/>
+  <path d="M-30,-30 C0,-44 36,-40 62,-18" fill="none" stroke="#c7b2ff" stroke-opacity="0.5" stroke-width="5" stroke-linecap="round"/>
+  <!-- öga: gult med vertikal pupill -->
+  <ellipse cx="18" cy="-10" rx="15" ry="11" fill="#f6e23a" stroke="#1a0b33" stroke-width="3"/>
+  <ellipse cx="19" cy="-10" rx="3.5" ry="9" fill="#0a0a0a"/>
+  <circle cx="14" cy="-14" r="2.5" fill="#fff" fill-opacity="0.9"/>
+  <!-- ögonbrynsplåt -->
+  <path d="M0,-24 C10,-30 30,-28 40,-20" fill="none" stroke="#1a0b33" stroke-width="5" stroke-linecap="round"/>
+  <!-- huggtänder -->
+  <path d="M52,14 L58,34 L64,14 Z" fill="#f4f0e6" stroke="#1a0b33" stroke-width="2"/>
+  <path d="M30,20 L36,38 L42,20 Z" fill="#f4f0e6" stroke="#1a0b33" stroke-width="2"/>
+  <!-- kluven tunga -->
+  <path d="M80,6 C100,8 110,8 122,2 M110,6 C118,12 124,18 128,24" fill="none" stroke="#e8304a" stroke-width="5" stroke-linecap="round"/>
+</g>
+</svg>
+"""
+
+
+def render(svg_or_html: str, out: pathlib.Path, w: int, h: int, scale: int = 2):
+    """Edge returnerar direkt och skriver skärmbilden i bakgrunden, så sidan och
+    profilen måste överleva anropet och vi väntar in filen."""
+    work = pathlib.Path(tempfile.gettempdir()) / "UlatekEggs-edge"
+    work.mkdir(exist_ok=True)
+    page = work / f"{out.stem}.html"
+    page.write_text(svg_or_html, encoding="utf-8")
+    if out.exists():
+        out.unlink()
+    subprocess.run([EDGE, "--headless=new", "--no-sandbox", "--disable-gpu", "--hide-scrollbars", "--no-first-run",
+                    f"--user-data-dir={work / 'profile'}", f"--force-device-scale-factor={scale}", f"--window-size={w},{h}",
+                    f"--screenshot={out}", page.as_uri()], check=True, capture_output=True, timeout=90)
+    last = -1
+    for _ in range(60):
+        time.sleep(1)
+        size = out.stat().st_size if out.exists() else -1
+        if size > 0 and size == last:
+            return
+        last = size
+    raise RuntimeError(f"Edge skrev ingen skärmbild till {out}")
 
 
 def main():
     docs = ROOT / "docs"
     docs.mkdir(exist_ok=True)
-    logo = draw_art(512)
-    logo.save(docs / "logo.png")
-    draw_art(64).save(ROOT / "Media" / "icon.png")
+    svg = build_svg()
+    (docs / "icon.svg").write_text(svg, encoding="utf-8")
+    page = f"<html><body style='margin:0;background:transparent'>{svg}</body></html>"
+    big = docs / "logo_1024.png"
+    render(page, big, 512, 512, scale=2)
+    im = Image.open(big).convert("RGBA")
+    im.resize((512, 512), Image.LANCZOS).save(docs / "logo.png")
+    im.resize((64, 64), Image.LANCZOS).save(ROOT / "Media" / "icon.png")
+    big.unlink()
 
-    # Social preview 1280x640: ikon till vänster, text till höger
-    sp = Image.new("RGBA", (1280, 640), BG + (255,))
-    sp.alpha_composite(logo.resize((480, 480), Image.LANCZOS), (80, 80))
-    d = ImageDraw.Draw(sp)
-    fonts = pathlib.Path(r"C:\Windows\Fonts")
-    big = ImageFont.truetype(str(fonts / "segoeuib.ttf"), 96)
-    mid = ImageFont.truetype(str(fonts / "segoeui.ttf"), 44)
-    small = ImageFont.truetype(str(fonts / "segoeui.ttf"), 32)
-    d.text((620, 170), "UlatekEggs", font=big, fill=(255, 255, 255))
-    d.text((624, 290), "Ditt ägg i fas 2 på Ula'tek", font=mid, fill=EGG)
-    d.text((624, 350), "WoW-addon av Tjocksmock", font=small, fill=(220, 220, 220))
-    d.text((624, 395), "For Science", font=small, fill=(255, 209, 0))
-    d.text((624, 470), "WowUp: Install from URL", font=small, fill=(170, 170, 170))
-    d.text((624, 510), "github.com/nucce1/UlatekEggs", font=small, fill=(170, 170, 170))
-    sp.convert("RGB").save(docs / "social-preview.png")
-    print("ok:", docs / "logo.png", docs / "social-preview.png", ROOT / "Media" / "icon.png")
+    preview = f"""<html><body style="margin:0;width:1280px;height:640px;background:radial-gradient(ellipse at 30% 50%,#15362a,#050b08 70%);
+font-family:'Segoe UI',Arial,sans-serif;color:#fff;position:relative;overflow:hidden">
+<div style="position:absolute;left:60px;top:40px;width:560px;height:560px">{build_svg(plate=False).replace('width="512" height="512"', 'width="560" height="560"')}</div>
+<div style="position:absolute;left:640px;top:150px">
+  <div style="font-size:92px;font-weight:700;letter-spacing:-1px;line-height:1">UlatekEggs</div>
+  <div style="font-size:40px;color:#8ef05a;margin-top:18px">Ditt ägg i fas 2 på Ula'tek</div>
+  <div style="font-size:30px;color:#ddd;margin-top:26px">WoW-addon av Tjocksmock</div>
+  <div style="font-size:30px;color:#ffd100">For Science</div>
+  <div style="font-size:26px;color:#9a9a9a;margin-top:50px">WowUp → Install from URL<br>github.com/nucce1/UlatekEggs</div>
+</div></body></html>"""
+    render(preview, docs / "social-preview.png", 1280, 640, scale=1)
+    print("ok:", docs / "icon.svg", docs / "logo.png", docs / "social-preview.png", ROOT / "Media" / "icon.png")
 
 
 if __name__ == "__main__":
