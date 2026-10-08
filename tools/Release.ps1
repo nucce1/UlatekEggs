@@ -45,17 +45,22 @@ Write-Host "installerad i AddOns"
 
 if ($SkipGit) { return }
 
-# 4. Git: commit, tag, push
+# 4. Git: commit, tag, push (git använder gh som credential helper: gh auth setup-git)
+$env:Path += ';C:\Program Files\GitHub CLI'
 git add -A
 $pending = git status --porcelain
 if ($pending) {
     $msg = if ($Message) { "v$version - $Message" } else { "v$version" }
     git commit -q -m $msg
+    if ($LASTEXITCODE -ne 0) { throw "git commit misslyckades" }
 }
 if (-not (git tag -l "v$version")) { git tag "v$version" }
-git push -q origin HEAD --follow-tags
+git push -q origin HEAD "v$version" # taggen uttryckligen: --follow-tags pushar bara annoterade taggar
+if ($LASTEXITCODE -ne 0) { throw "git push misslyckades (kör 'gh auth setup-git' om git inte hittar tokenen)" }
 
 # 5. GitHub-release med zip + release.json
+if (gh release view "v$version" 2>$null) { throw "release v$version finns redan - bumpa versionen i UlatekEggs.toc" }
 $notes = if ($Message) { $Message } else { "UlatekEggs v$version" }
 gh release create "v$version" $zip "$dist\release.json" --title "v$version" --notes $notes
-Write-Host "release v$version publicerad" -ForegroundColor Green
+if ($LASTEXITCODE -ne 0) { throw "gh release create misslyckades" }
+Write-Host "release v$version publicerad: https://github.com/nucce1/UlatekEggs/releases/tag/v$version" -ForegroundColor Green
