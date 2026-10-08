@@ -1,4 +1,5 @@
 # UlatekEggs
+<img src="docs/logo.png" width="180" align="right" alt="Ula'tek slingrad runt ett grönt ägg">
 
 WoW-addon av **Tjocksmock**, guilden **For Science**. Visar i fas 2 på Ula'tek (Mythic) en liten kartbit över din sida av arenan med äggen som röda prickar och **ditt ägg som grön prick**. Två fönster på 30 s: övre hörnet (3:28 efter pull) och nedre hörnet (3:54). Kartan visas bara för den som har ett ägg i det aktuella hörnet.
 
